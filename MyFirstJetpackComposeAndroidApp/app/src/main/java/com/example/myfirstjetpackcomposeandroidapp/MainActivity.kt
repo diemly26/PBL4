@@ -1,7 +1,10 @@
 package com.example.myfirstjetpackcomposeandroidapp
 
+import android.content.pm.PackageManager
+import android.media.MediaRecorder
 import android.os.Bundle
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -40,15 +43,21 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import com.example.myfirstjetpackcomposeandroidapp.ui.theme.MyFirstJetpackComposeAndroidAppTheme
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
 var ESP8266_URL = "http://10.10.27.246"
+private const val REQUEST_MIC_PERMISSION = 200
 
 class MainActivity : ComponentActivity() {
 //    private val ESP8266_URL = "http://10.10.27.246"
     private val TAG: String = "HTTP_Response"
+    private var mediaRecorder: MediaRecorder? = null
+    private lateinit var outputFile: File
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -234,12 +243,19 @@ class MainActivity : ComponentActivity() {
 
                                 Button(
                                     onClick = {
-                                        micIsOn = !micIsOn
-                                        textOfMicButton = if (micIsOn) "Nói gì đi" else "Mic"
-                                        if (micIsOn) {
-                                            micPainter = micOnPainter
+                                        if (!checkMicroPhonePermission()) {
+                                            requestMicrophonePermission()
                                         } else {
-                                            micPainter = micOffPainter
+
+                                            micIsOn = !micIsOn
+                                            textOfMicButton = if (micIsOn) "Nói gì đi" else "Mic"
+                                            if (micIsOn) {
+                                                micPainter = micOnPainter
+                                                startRecording()
+                                            } else {
+                                                micPainter = micOffPainter
+                                                stopRecording()
+                                            }
                                         }
                                     },
                                     modifier = Modifier
@@ -305,5 +321,54 @@ class MainActivity : ComponentActivity() {
                 Log.e(TAG, "Exception: ${e.message}")
             }
         }.start()
+    }
+
+    private fun checkMicroPhonePermission(): Boolean {
+        val permission = ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
+        return permission == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun requestMicrophonePermission() {
+        ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.RECORD_AUDIO), REQUEST_MIC_PERMISSION)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+
+        if (requestCode == REQUEST_MIC_PERMISSION) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, "Quyền ghi âm đã được cấp", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Quyền ghi âm bị từ chối", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun startRecording() {
+        outputFile = File(externalCacheDir?.absolutePath + "recorded_audio.mp4")
+        mediaRecorder = MediaRecorder().apply {
+            setAudioSource(MediaRecorder.AudioSource.MIC)
+            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+            setOutputFile(outputFile.absolutePath)
+            prepare()
+            start()
+        }
+        Toast.makeText(this, "Bắt đầu ghi âm", Toast.LENGTH_SHORT).show()
+        Log.d(TAG,"Bắt đầu ghi âm")
+    }
+
+    private fun stopRecording() {
+        mediaRecorder?.apply {
+            stop()
+            release()
+        }
+        mediaRecorder = null
+        Toast.makeText(this, "Đã dừng ghi âm", Toast.LENGTH_SHORT).show()
+        Log.d(TAG, "Đã dừng ghi âm và lưu tại $(outputFile.absolutePath)")
     }
 }
