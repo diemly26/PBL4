@@ -1,8 +1,12 @@
 package com.example.myfirstjetpackcomposeandroidapp
 
 import android.content.pm.PackageManager
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.os.Bundle
+import android.provider.MediaStore.Audio.Media
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -52,14 +56,17 @@ import java.net.URL
 
 var ESP8266_URL = "http://10.10.27.246"
 private const val REQUEST_MIC_PERMISSION = 200
+private const val REQUEST_STORAGE_PERMISSION = 300
 
 class MainActivity : ComponentActivity() {
 //    private val ESP8266_URL = "http://10.10.27.246"
     private val TAG: String = "HTTP_Response"
     private var mediaRecorder: MediaRecorder? = null
+    private var mediaPlayer: MediaPlayer? = null
     private lateinit var outputFile: File
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         enableEdgeToEdge()
         setContent {
             MyFirstJetpackComposeAndroidAppTheme {
@@ -243,8 +250,8 @@ class MainActivity : ComponentActivity() {
 
                                 Button(
                                     onClick = {
-                                        if (!checkMicroPhonePermission()) {
-                                            requestMicrophonePermission()
+                                        if (!checkPermissions()) {
+                                            requestPermissions()
                                         } else {
 
                                             micIsOn = !micIsOn
@@ -323,14 +330,32 @@ class MainActivity : ComponentActivity() {
         }.start()
     }
 
-    private fun checkMicroPhonePermission(): Boolean {
-        val permission = ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
-        return permission == PackageManager.PERMISSION_GRANTED
+    private fun checkPermissions(): Boolean {
+        val micPermission = ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
+        val storagePermission = ContextCompat.checkSelfPermission(this, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        return micPermission == PackageManager.PERMISSION_GRANTED && storagePermission == PackageManager.PERMISSION_GRANTED
     }
 
-    private fun requestMicrophonePermission() {
-        ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.RECORD_AUDIO), REQUEST_MIC_PERMISSION)
+    private fun requestPermissions() {
+        val permissionsNeeded = mutableListOf<String>()
+
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            permissionsNeeded.add(android.Manifest.permission.RECORD_AUDIO)
+        }
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            permissionsNeeded.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        }
+
+        if (permissionsNeeded.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, permissionsNeeded.toTypedArray(), REQUEST_PERMISSIONS_CODE)
+        }
     }
+
+    // Thêm mã request code để nhận diện yêu cầu
+    companion object {
+        private const val REQUEST_PERMISSIONS_CODE = 100
+    }
+
 
     override fun onRequestPermissionsResult(
         requestCode: Int,
@@ -339,17 +364,17 @@ class MainActivity : ComponentActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
-        if (requestCode == REQUEST_MIC_PERMISSION) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Toast.makeText(this, "Quyền ghi âm đã được cấp", Toast.LENGTH_SHORT).show()
+        if (requestCode == REQUEST_PERMISSIONS_CODE) {
+            if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+                Toast.makeText(this, "Tất cả quyền đã được cấp", Toast.LENGTH_SHORT).show()
             } else {
-                Toast.makeText(this, "Quyền ghi âm bị từ chối", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Không đủ quyền truy cập", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
     private fun startRecording() {
-        outputFile = File(externalCacheDir?.absolutePath + "recorded_audio.mp4")
+        outputFile = File(getExternalFilesDir(null), "recorded_audio.mp4")
         mediaRecorder = MediaRecorder().apply {
             setAudioSource(MediaRecorder.AudioSource.MIC)
             setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
@@ -368,7 +393,25 @@ class MainActivity : ComponentActivity() {
             release()
         }
         mediaRecorder = null
+
         Toast.makeText(this, "Đã dừng ghi âm", Toast.LENGTH_SHORT).show()
-        Log.d(TAG, "Đã dừng ghi âm và lưu tại $(outputFile.absolutePath)")
+        Log.d(TAG, "Đã dừng ghi âm và lưu tại ${outputFile.absolutePath}")
+
+        // Phát file âm thanh sau khi dừng ghi
+        mediaPlayer = MediaPlayer().apply {
+            setDataSource(outputFile.absolutePath)
+            prepare()  // Chuẩn bị phát âm thanh
+            setOnCompletionListener {
+                release()
+                mediaPlayer = null
+            }
+            start()    // Phát âm thanh
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        mediaPlayer?.release()
+        mediaPlayer = null
     }
 }
