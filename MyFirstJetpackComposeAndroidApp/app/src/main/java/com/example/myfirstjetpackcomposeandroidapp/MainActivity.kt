@@ -544,6 +544,4 @@ class MainActivity : ComponentActivity() {
         mediaPlayer?.release()
         mediaPlayer = null
     }
-
-    
 }
