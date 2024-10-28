@@ -328,15 +328,15 @@ class MainActivity : ComponentActivity() {
             var responseData: ResponseData? = null
 
             // Phát file âm thanh sau khi dừng ghi
-            mediaPlayer = MediaPlayer().apply {
-                setDataSource(filePath)
-                prepare()
-                setOnCompletionListener {
-                    release()
-                    mediaPlayer = null
-                }
-                start()
-            }
+//            mediaPlayer = MediaPlayer().apply {
+//                setDataSource(filePath)
+//                prepare()
+//                setOnCompletionListener {
+//                    release()
+//                    mediaPlayer = null
+//                }
+//                start()
+//            }
 
             try {
                 val connection = url.openConnection() as HttpURLConnection
@@ -529,6 +529,7 @@ class MainActivity : ComponentActivity() {
         uploadFile(outputFile.absolutePath.toString()) { response ->
             response?.let {
                 Log.d(TAG,"Best Match: ${it.bestMatch}")
+                handleBestMatch(it.bestMatch)
                 Log.d(TAG,"Recognized Text: ${it.recognizedText}")
                 Log.d(TAG,"Score: ${it.score}")
             } ?: Log.d(TAG,"Failed to get response")
