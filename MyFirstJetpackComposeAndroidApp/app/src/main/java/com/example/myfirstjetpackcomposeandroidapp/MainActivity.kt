@@ -535,6 +535,32 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    fun handleBestMatch(recordText: String) {
+        if (recordText == "bật đèn") {
+            sendRequest("/light/on")
+            return
+        }
+        if (recordText == "tắt đèn") {
+            sendRequest("/light/off")
+            return
+        }
+        if (recordText == "bật quạt") {
+            sendRequest("/fan/on")
+            return
+        }
+        if (recordText == "tắt quạt") {
+            sendRequest("/fan/off")
+            return
+        }
+        if (recordText == "mở cửa") {
+            sendRequest("/door/open")
+            return
+        }
+        if (recordText == "đóng cửa") {
+            sendRequest("/door/close")
+            return
+        }
+    }
 
     private fun convertToMp3(inputPath: String) {
     }
