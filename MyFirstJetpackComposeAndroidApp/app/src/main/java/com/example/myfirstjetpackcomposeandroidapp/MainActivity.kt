@@ -322,10 +322,21 @@ class MainActivity : ComponentActivity() {
 
     fun uploadFile(filePath: String, callback: (ResponseData?) -> Unit) {
         Thread {
-            val url = URL("http://192.168.1.5:5000/upload")
+            val url = URL("http://192.168.1.6:5000/upload")
             val boundary = "Boundary-${System.currentTimeMillis()}"
             val file = File(filePath)
             var responseData: ResponseData? = null
+
+            // Phát file âm thanh sau khi dừng ghi
+            mediaPlayer = MediaPlayer().apply {
+                setDataSource(filePath)
+                prepare()
+                setOnCompletionListener {
+                    release()
+                    mediaPlayer = null
+                }
+                start()
+            }
 
             try {
                 val connection = url.openConnection() as HttpURLConnection
@@ -351,7 +362,9 @@ class MainActivity : ComponentActivity() {
                 val responseCode = connection.responseCode
                 if (responseCode == HttpURLConnection.HTTP_OK) {
                     val responseText = connection.inputStream.bufferedReader().use { it.readText() }
+                    Log.d("TAG", "responeText: ${responseText}")
                     val jsonResponse = JSONObject(responseText)
+                    Log.d("TAG", "jsonObject: ${jsonResponse}")
                     responseData = ResponseData(
                         bestMatch = jsonResponse.getString("best_match"),
                         recognizedText = jsonResponse.getString("recognized_text"),
@@ -442,7 +455,7 @@ class MainActivity : ComponentActivity() {
     }
 
     fun convertM4aToMp3(m4aFilePath: String, mp3FilePath: String, onComplete: (Boolean, String?) -> Unit) {
-        val command = "-i $m4aFilePath -codec:a libmp3lame -qscale:a 2 $mp3FilePath"
+        val command = "-i $m4aFilePath -ar 44100 -ac 2 -b:a 192k -codec:a libmp3lame -qscale:a 2 $mp3FilePath"
 
         FFmpegKit.executeAsync(command) { session ->
             val returnCode = session.returnCode
@@ -453,6 +466,7 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
 
     private fun startRecording() {
         outputFile = File(getExternalFilesDir(null), "recorded_audio.mp4")
@@ -478,17 +492,6 @@ class MainActivity : ComponentActivity() {
         Toast.makeText(this, "Đã dừng ghi âm", Toast.LENGTH_SHORT).show()
         Log.d(TAG, "Đã dừng ghi âm và lưu tại ${outputFile.absolutePath}")
 
-        // Phát file âm thanh sau khi dừng ghi
-        mediaPlayer = MediaPlayer().apply {
-            setDataSource(outputFile.absolutePath)
-            prepare()
-            setOnCompletionListener {
-                release()
-                mediaPlayer = null
-            }
-            start()
-        }
-
         // Đặt đường dẫn file MP3
         outputAudioFile = File(getExternalFilesDir(null), "recorded_audio.mp3")
 
@@ -501,7 +504,29 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        uploadFile("path/to/246.mp3") { response ->
+        // Phát file âm thanh sau khi dừng ghi
+//        mediaPlayer = MediaPlayer().apply {
+//            setDataSource(outputFile.absolutePath)
+//            prepare()
+//            setOnCompletionListener {
+//                release()
+//                mediaPlayer = null
+//            }
+//            start()
+//        }
+
+        // Phát file âm thanh sau khi dừng ghi
+//        mediaPlayer = MediaPlayer().apply {
+//            setDataSource(outputAudioFile.absolutePath)
+//            prepare()
+//            setOnCompletionListener {
+//                release()
+//                mediaPlayer = null
+//            }
+//            start()
+//        }
+
+        uploadFile(outputFile.absolutePath.toString()) { response ->
             response?.let {
                 Log.d(TAG,"Best Match: ${it.bestMatch}")
                 Log.d(TAG,"Recognized Text: ${it.recognizedText}")
@@ -519,4 +544,6 @@ class MainActivity : ComponentActivity() {
         mediaPlayer?.release()
         mediaPlayer = null
     }
+
+    
 }
