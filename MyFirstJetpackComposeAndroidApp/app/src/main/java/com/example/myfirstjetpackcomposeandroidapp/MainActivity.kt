@@ -538,26 +538,32 @@ class MainActivity : ComponentActivity() {
     fun handleBestMatch(recordText: String) {
         if (recordText == "bật đèn") {
             sendRequest("/light/on")
+            Log.d("TAG","bat den")
             return
         }
         if (recordText == "tắt đèn") {
             sendRequest("/light/off")
+            Log.d("TAG","tat den")
             return
         }
         if (recordText == "bật quạt") {
             sendRequest("/fan/on")
+            Log.d("TAG","bat quat")
             return
         }
         if (recordText == "tắt quạt") {
             sendRequest("/fan/off")
+            Log.d("TAG","tat quat")
             return
         }
         if (recordText == "mở cửa") {
             sendRequest("/door/open")
+            Log.d("TAG","mo cua")
             return
         }
         if (recordText == "đóng cửa") {
             sendRequest("/door/close")
+            Log.d("TAG","dong cua")
             return
         }
     }
