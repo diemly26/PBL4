@@ -1,11 +1,16 @@
 package com.example.myfirstjetpackcomposeandroidapp
 
+import org.json.JSONObject
+import com.arthenica.ffmpegkit.FFmpegKit
+import com.arthenica.ffmpegkit.ReturnCode
 import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore.Audio.Media
 import android.util.Log
 import android.widget.Toast
@@ -51,8 +56,15 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.example.myfirstjetpackcomposeandroidapp.ui.theme.MyFirstJetpackComposeAndroidAppTheme
 import java.io.File
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+
+data class ResponseData(
+    val bestMatch: String,
+    val recognizedText: String,
+    val score: Int
+)
 
 var ESP8266_URL = "http://10.10.27.246"
 private const val REQUEST_MIC_PERMISSION = 200
@@ -64,6 +76,7 @@ class MainActivity : ComponentActivity() {
     private var mediaRecorder: MediaRecorder? = null
     private var mediaPlayer: MediaPlayer? = null
     private lateinit var outputFile: File
+    private lateinit var outputAudioFile: File
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -307,6 +320,61 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    fun uploadFile(filePath: String, callback: (ResponseData?) -> Unit) {
+        Thread {
+            val url = URL("http://192.168.1.5:5000/upload")
+            val boundary = "Boundary-${System.currentTimeMillis()}"
+            val file = File(filePath)
+            var responseData: ResponseData? = null
+
+            try {
+                val connection = url.openConnection() as HttpURLConnection
+                connection.requestMethod = "POST"
+                connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+                connection.doOutput = true
+
+                val outputStream = connection.outputStream
+                outputStream.bufferedWriter().use { writer ->
+                    writer.write("--$boundary\r\n")
+                    writer.write("Content-Disposition: form-data; name=\"file\"; filename=\"${file.name}\"\r\n")
+                    writer.write("Content-Type: audio/mpeg\r\n\r\n")
+                    writer.flush()
+
+                    file.inputStream().use { fileInputStream ->
+                        fileInputStream.copyTo(outputStream)
+                    }
+
+                    writer.write("\r\n--$boundary--\r\n")
+                    writer.flush()
+                }
+
+                val responseCode = connection.responseCode
+                if (responseCode == HttpURLConnection.HTTP_OK) {
+                    val responseText = connection.inputStream.bufferedReader().use { it.readText() }
+                    val jsonResponse = JSONObject(responseText)
+                    responseData = ResponseData(
+                        bestMatch = jsonResponse.getString("best_match"),
+                        recognizedText = jsonResponse.getString("recognized_text"),
+                        score = jsonResponse.getInt("score")
+                    )
+                } else {
+                    Log.e("TAG", "Error Response Code: $responseCode")
+                }
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Log.e("TAG", "Exception: ${e.message}")
+            }
+
+            // Chuyển về luồng chính để trả kết quả qua callback
+            Handler(Looper.getMainLooper()).post {
+                callback(responseData)
+            }
+
+        }.start()
+    }
+
+
     private fun sendRequest(endpoint: String) {
         Thread {
             try {
@@ -373,6 +441,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    fun convertM4aToMp3(m4aFilePath: String, mp3FilePath: String, onComplete: (Boolean, String?) -> Unit) {
+        val command = "-i $m4aFilePath -codec:a libmp3lame -qscale:a 2 $mp3FilePath"
+
+        FFmpegKit.executeAsync(command) { session ->
+            val returnCode = session.returnCode
+            if (ReturnCode.isSuccess(returnCode)) {
+                onComplete(true, mp3FilePath)
+            } else {
+                onComplete(false, session.failStackTrace?.toString())
+            }
+        }
+    }
+
     private fun startRecording() {
         outputFile = File(getExternalFilesDir(null), "recorded_audio.mp4")
         mediaRecorder = MediaRecorder().apply {
@@ -400,13 +481,37 @@ class MainActivity : ComponentActivity() {
         // Phát file âm thanh sau khi dừng ghi
         mediaPlayer = MediaPlayer().apply {
             setDataSource(outputFile.absolutePath)
-            prepare()  // Chuẩn bị phát âm thanh
+            prepare()
             setOnCompletionListener {
                 release()
                 mediaPlayer = null
             }
-            start()    // Phát âm thanh
+            start()
         }
+
+        // Đặt đường dẫn file MP3
+        outputAudioFile = File(getExternalFilesDir(null), "recorded_audio.mp3")
+
+        // Chuyển đổi từ M4A sang MP3
+        convertM4aToMp3(outputFile.absolutePath, outputAudioFile.absolutePath) { success, result ->
+            if (success) {
+                Log.d(TAG, "Chuyển đổi thành công! File MP3: $result")
+            } else {
+                Log.e(TAG, "Lỗi chuyển đổi: $result")
+            }
+        }
+
+        uploadFile("path/to/246.mp3") { response ->
+            response?.let {
+                Log.d(TAG,"Best Match: ${it.bestMatch}")
+                Log.d(TAG,"Recognized Text: ${it.recognizedText}")
+                Log.d(TAG,"Score: ${it.score}")
+            } ?: Log.d(TAG,"Failed to get response")
+        }
+    }
+
+
+    private fun convertToMp3(inputPath: String) {
     }
 
     override fun onDestroy() {
