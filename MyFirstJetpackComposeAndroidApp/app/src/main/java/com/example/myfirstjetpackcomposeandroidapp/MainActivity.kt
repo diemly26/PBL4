@@ -39,6 +39,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -54,11 +55,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.MutableLiveData
 import com.example.myfirstjetpackcomposeandroidapp.ui.theme.MyFirstJetpackComposeAndroidAppTheme
 import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import kotlin.math.log
 
 data class ResponseData(
     val bestMatch: String,
@@ -69,6 +72,8 @@ data class ResponseData(
 var ESP8266_URL = "http://10.10.27.246"
 private const val REQUEST_MIC_PERMISSION = 200
 private const val REQUEST_STORAGE_PERMISSION = 300
+var lightIsOn: Boolean = false
+var lightColor: Color = Color(red = 180, green = 190, blue = 201)
 
 class MainActivity : ComponentActivity() {
 //    private val ESP8266_URL = "http://10.10.27.246"
@@ -77,9 +82,17 @@ class MainActivity : ComponentActivity() {
     private var mediaPlayer: MediaPlayer? = null
     private lateinit var outputFile: File
     private lateinit var outputAudioFile: File
+    private var light = MutableLiveData<Boolean>(false)
+    var lightIsOnColor = Color(red = 242, green = 235, blue = 133)
+    var lightIsOffColor = Color(red = 180, green = 190, blue = 201)
+    private var lightColorLiveData = MutableLiveData<Color>(Color(red = 180, green = 190, blue = 201))
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setupUI()
+    }
 
+    fun setupUI() {
         enableEdgeToEdge()
         setContent {
             MyFirstJetpackComposeAndroidAppTheme {
@@ -106,12 +119,14 @@ class MainActivity : ComponentActivity() {
                             verticalArrangement = Arrangement.spacedBy(16.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            var lightIsOn by remember { mutableStateOf(false) }
+//                            var lightIsOn by remember { mutableStateOf(false) }
                             var textOfLightButton by remember { mutableStateOf("Bật đèn ") }
                             var lightOnPainter = painterResource(id = R.drawable.light_is_on)
                             var lightOffPainter = painterResource(id = R.drawable.light_is_off)
                             var lightPainter by remember { mutableStateOf(lightOffPainter) }
+                            var lightColor = lightColorLiveData.observeAsState()
 
+                            val lightColor1 = lightColor
                             Button(
                                 onClick = {
                                     lightIsOn = !lightIsOn
@@ -119,13 +134,15 @@ class MainActivity : ComponentActivity() {
                                     if (lightIsOn) {
                                         lightPainter = lightOnPainter
                                         sendRequest("/light/on")
+                                        lightColorLiveData.postValue(lightIsOnColor)
                                     } else {
                                         lightPainter = lightOffPainter
                                         sendRequest("/light/off")
+                                        lightColorLiveData.postValue(lightIsOffColor)
                                     }
                                 },
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (lightIsOn) Color(red = 242, green = 235, blue = 133) else Color(red = 180, green = 190, blue = 201)
+                                    containerColor = lightColor.value!!
                                 ),
                                 modifier = Modifier
                                     .fillMaxSize()
@@ -155,6 +172,8 @@ class MainActivity : ComponentActivity() {
 
                             Button(
                                 onClick = {
+                                    lightIsOn = !lightIsOn
+                                    setupUI()
                                     fanIsOn = !fanIsOn
                                     textOfFanButton = if (fanIsOn) "Tắt quạt " else "Bật quạt "
                                     if (fanIsOn) {
@@ -193,9 +212,12 @@ class MainActivity : ComponentActivity() {
                             var doorOnPainter = painterResource(id = R.drawable.door_is_open)
                             var doorOffPainter = painterResource(id = R.drawable.door_is_close)
                             var doorPainter by remember { mutableStateOf(doorOffPainter) }
+                            var status by remember { mutableStateOf(false) }
 
                             Button(
                                 onClick = {
+                                    status = !status
+                                    updateUILightButton(status)
                                     doorIsOpen = !doorIsOpen
                                     textOfDoorButton = if (doorIsOpen) "Đóng cửa" else "Mở cửa"
                                     if (doorIsOpen) {
@@ -317,6 +339,15 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    fun updateUILightButton(status: Boolean) {
+        Log.d("TAG", "did update ui light button")
+        if (status) {
+            lightColorLiveData.postValue(lightIsOnColor)
+        } else {
+            lightColorLiveData.postValue(lightIsOffColor)
         }
     }
 

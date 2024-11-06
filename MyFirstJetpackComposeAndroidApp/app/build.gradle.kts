@@ -67,4 +67,7 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
     implementation(libs.ffmpeg.kit.full)
+    implementation("androidx.compose.runtime:runtime-livedata:1.6.8")
+
+
 }
