@@ -322,7 +322,7 @@ class MainActivity : ComponentActivity() {
 
     fun uploadFile(filePath: String, callback: (ResponseData?) -> Unit) {
         Thread {
-            val url = URL("http://192.168.1.6:5000/upload")
+            val url = URL("http://10.10.27.11:5000/upload")
             val boundary = "Boundary-${System.currentTimeMillis()}"
             val file = File(filePath)
             var responseData: ResponseData? = null
