@@ -1,17 +1,11 @@
 package com.example.myfirstjetpackcomposeandroidapp
 
-import org.json.JSONObject
-import com.arthenica.ffmpegkit.FFmpegKit
-import com.arthenica.ffmpegkit.ReturnCode
 import android.content.pm.PackageManager
-import android.media.AudioFormat
-import android.media.AudioRecord
 import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.provider.MediaStore.Audio.Media
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -29,15 +23,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-//import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,16 +40,23 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.arthenica.ffmpegkit.FFmpegKit
+import com.arthenica.ffmpegkit.ReturnCode
 import com.example.myfirstjetpackcomposeandroidapp.ui.theme.MyFirstJetpackComposeAndroidAppTheme
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.DatabaseReference
+import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ValueEventListener
+import org.json.JSONObject
 import java.io.File
-import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+
 
 data class ResponseData(
     val bestMatch: String,
@@ -71,7 +69,9 @@ private const val REQUEST_MIC_PERMISSION = 200
 private const val REQUEST_STORAGE_PERMISSION = 300
 
 class MainActivity : ComponentActivity() {
+
 //    private val ESP8266_URL = "http://10.10.27.246"
+    val database = FirebaseDatabase.getInstance().reference.child("keys")
     private val TAG: String = "HTTP_Response"
     private var mediaRecorder: MediaRecorder? = null
     private var mediaPlayer: MediaPlayer? = null
@@ -95,6 +95,46 @@ class MainActivity : ComponentActivity() {
                             )
                         )
                 ) {
+                    var lightIsOn by remember { mutableStateOf(false) }
+                    var textOfLightButton by remember { mutableStateOf("Bật đèn ") }
+                    var lightOnPainter = painterResource(id = R.drawable.light_is_on)
+                    var lightOffPainter = painterResource(id = R.drawable.light_is_off)
+                    var lightPainter by remember { mutableStateOf(lightOffPainter) }
+
+                    var fanIsOn by remember { mutableStateOf(false) }
+                    var textOfFanButton by remember { mutableStateOf("Bật quạt ") }
+                    var fanOnPainter = painterResource(id = R.drawable.fan_is_on)
+                    var fanOffPainter = painterResource(id = R.drawable.fan_is_off)
+                    var fanPainter by remember { mutableStateOf(fanOffPainter) }
+
+                    var doorIsOpen by remember { mutableStateOf(false) }
+                    var textOfDoorButton by remember { mutableStateOf("Mở cửa") }
+                    var doorOnPainter = painterResource(id = R.drawable.door_is_open)
+                    var doorOffPainter = painterResource(id = R.drawable.door_is_close)
+                    var doorPainter by remember { mutableStateOf(doorOffPainter) }
+
+                    database.addValueEventListener(object : ValueEventListener {
+                        override fun onDataChange(snapshot: DataSnapshot) {
+                            // Cập nhật trạng thái từ Firebase
+                            lightIsOn = snapshot.child("1").getValue(Int::class.java) == 1
+                            textOfLightButton = if (lightIsOn) "Tắt đèn " else "Bật đèn "
+                            lightPainter = if (lightIsOn) lightOnPainter else lightOffPainter
+
+                            fanIsOn = snapshot.child("2").getValue(Int::class.java) == 1
+                            textOfFanButton = if (fanIsOn) "Tắt quạt " else "Bật quạt "
+                            fanPainter = if (fanIsOn) fanOnPainter else fanOffPainter
+
+                            doorIsOpen = snapshot.child("3").getValue(Int::class.java) == 1
+                            textOfDoorButton = if (doorIsOpen) "Đóng cửa" else "Mở cửa"
+                            doorPainter = if (doorIsOpen) doorOnPainter else doorOffPainter
+                        }
+
+                        override fun onCancelled(error: DatabaseError) {
+                            // Xử lý lỗi nếu cần
+                            Log.e("FirebaseError", "Không thể lấy dữ liệu từ Firebase: ${error.message}")
+                        }
+                    })
+
                     Surface(
                         modifier = Modifier.fillMaxSize(),
                         color = Color.Transparent
@@ -106,16 +146,13 @@ class MainActivity : ComponentActivity() {
                             verticalArrangement = Arrangement.spacedBy(16.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            var lightIsOn by remember { mutableStateOf(false) }
-                            var textOfLightButton by remember { mutableStateOf("Bật đèn ") }
-                            var lightOnPainter = painterResource(id = R.drawable.light_is_on)
-                            var lightOffPainter = painterResource(id = R.drawable.light_is_off)
-                            var lightPainter by remember { mutableStateOf(lightOffPainter) }
+
 
                             Button(
                                 onClick = {
                                     lightIsOn = !lightIsOn
                                     textOfLightButton = if (lightIsOn) "Tắt đèn " else "Bật đèn "
+                                    database.child("1").setValue(if (lightIsOn) 1 else 0)
                                     if (lightIsOn) {
                                         lightPainter = lightOnPainter
                                         sendRequest("/light/on")
@@ -147,16 +184,13 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
 
-                            var fanIsOn by remember { mutableStateOf(false) }
-                            var textOfFanButton by remember { mutableStateOf("Bật quạt ") }
-                            var fanOnPainter = painterResource(id = R.drawable.fan_is_on)
-                            var fanOffPainter = painterResource(id = R.drawable.fan_is_off)
-                            var fanPainter by remember { mutableStateOf(fanOffPainter) }
+
 
                             Button(
                                 onClick = {
                                     fanIsOn = !fanIsOn
                                     textOfFanButton = if (fanIsOn) "Tắt quạt " else "Bật quạt "
+                                    database.child("2").setValue(if (fanIsOn) 1 else 0)
                                     if (fanIsOn) {
                                         fanPainter = fanOnPainter
                                         sendRequest("/fan/on")
@@ -188,16 +222,12 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
 
-                            var doorIsOpen by remember { mutableStateOf(false) }
-                            var textOfDoorButton by remember { mutableStateOf("Mở cửa") }
-                            var doorOnPainter = painterResource(id = R.drawable.door_is_open)
-                            var doorOffPainter = painterResource(id = R.drawable.door_is_close)
-                            var doorPainter by remember { mutableStateOf(doorOffPainter) }
 
                             Button(
                                 onClick = {
                                     doorIsOpen = !doorIsOpen
                                     textOfDoorButton = if (doorIsOpen) "Đóng cửa" else "Mở cửa"
+                                    database.child("3").setValue(if (doorIsOpen) 1 else 0)
                                     if (doorIsOpen) {
                                         doorPainter = doorOnPainter
                                         sendRequest("/door/open")
@@ -297,6 +327,7 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
                             }
+
                             var currentUrl by remember { mutableStateOf(ESP8266_URL) }
                             // Hiển thị TextField khi isTextFieldVisible là true
                             if (isTextFieldVisible) {
@@ -316,8 +347,10 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+
             }
         }
+
     }
 
     fun uploadFile(filePath: String, callback: (ResponseData?) -> Unit) {

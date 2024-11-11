@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "849633799653",
+    "project_id": "pbl4-nhom-3",
+    "storage_bucket": "pbl4-nhom-3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:849633799653:android:d9677c43073172a062d30c",
+        "android_client_info": {
+          "package_name": "com.example.myfirstjetpackcomposeandroidapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBfpLUfgmUbNXdnbvHYXq2mdehS--fTD6c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
