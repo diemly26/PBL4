@@ -1,8 +1,13 @@
 package com.example.myfirstjetpackcomposeandroidapp
 
+import ai.picovoice.porcupine.Porcupine
+import ai.picovoice.porcupine.PorcupineException
+import ai.picovoice.porcupine.PorcupineManager
+import ai.picovoice.porcupine.PorcupineManagerCallback
 import android.content.pm.PackageManager
 import android.media.MediaPlayer
 import android.media.MediaRecorder
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -49,7 +54,6 @@ import com.arthenica.ffmpegkit.ReturnCode
 import com.example.myfirstjetpackcomposeandroidapp.ui.theme.MyFirstJetpackComposeAndroidAppTheme
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import org.json.JSONObject
@@ -64,9 +68,21 @@ data class ResponseData(
     val score: Int
 )
 
-var ESP8266_URL = "http://10.10.27.246"
+var ESP8266_URL = "http://10.10.26.4"
 private const val REQUEST_MIC_PERMISSION = 200
 private const val REQUEST_STORAGE_PERMISSION = 300
+private lateinit var porcupineManager: PorcupineManager
+
+var wakeWordCallback =
+    PorcupineManagerCallback { keywordIndex ->
+        if (keywordIndex == 0) {
+            // Xử lý khi từ khóa "porcupine" được phát hiện
+            println("Porcupine keyword detected!")
+        } else if (keywordIndex == 1) {
+            // Xử lý khi từ khóa "bumblebee" được phát hiện
+            println("Bumblebee keyword detected!")
+        }
+    }
 
 class MainActivity : ComponentActivity() {
 
@@ -77,8 +93,55 @@ class MainActivity : ComponentActivity() {
     private var mediaPlayer: MediaPlayer? = null
     private lateinit var outputFile: File
     private lateinit var outputAudioFile: File
+
+
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        try {
+            porcupineManager = PorcupineManager.Builder()
+                .setAccessKey("YOUR_ACCESS_KEY") // Thay YOUR_ACCESS_KEY bằng Access Key của bạn
+                .setKeywords(
+                    arrayOf(
+                        Porcupine.BuiltInKeyword.PORCUPINE,
+                        Porcupine.BuiltInKeyword.BUMBLEBEE
+                    )
+                )
+                .build(applicationContext, wakeWordCallback)
+
+            porcupineManager.start() // Bắt đầu lắng nghe từ khóa
+            Log.d("PorcupineManager", "PorcupineManager started successfully.")
+        } catch (e: PorcupineException) {
+            e.printStackTrace()
+            Log.e("PorcupineManager", "Failed to initialize PorcupineManager: ${e.message}")
+        }
+
+        if (!checkMicrophonePermission()) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(android.Manifest.permission.RECORD_AUDIO),
+                REQUEST_MIC_PERMISSION
+            )
+        }
+
+        var wakeWordCallback =
+            PorcupineManagerCallback { keywordIndex ->
+                when (keywordIndex) {
+                    0 -> {
+                        Log.d("WakeWord", "Porcupine detected!")
+                        sendRequest("/light/on")
+                        database.child("1").setValue(1)
+                    }
+                    1 -> {
+                        Log.d("WakeWord", "Bumblebee detected!")
+                        sendRequest("/fan/on")
+                        database.child("2").setValue(1)
+                    }
+                    else -> Log.d("WakeWord", "Unknown keyword detected!")
+                }
+            }
+
 
         enableEdgeToEdge()
         setContent {
@@ -355,7 +418,7 @@ class MainActivity : ComponentActivity() {
 
     fun uploadFile(filePath: String, callback: (ResponseData?) -> Unit) {
         Thread {
-            val url = URL("http://192.168.1.6:5000/upload")
+            val url = URL("http://10.10.26.88:5000/upload")
             val boundary = "Boundary-${System.currentTimeMillis()}"
             val file = File(filePath)
             var responseData: ResponseData? = null
@@ -443,11 +506,46 @@ class MainActivity : ComponentActivity() {
             }
         }.start()
     }
+    // Thêm mã request code để nhận diện yêu cầu
+    companion object {
+        private const val REQUEST_PERMISSIONS_CODE = 100
+    }
 
     private fun checkPermissions(): Boolean {
         val micPermission = ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
-        val storagePermission = ContextCompat.checkSelfPermission(this, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
-        return micPermission == PackageManager.PERMISSION_GRANTED && storagePermission == PackageManager.PERMISSION_GRANTED
+        val storagePermission = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(this, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        } else {
+            PackageManager.PERMISSION_GRANTED
+        }
+
+        val readImagesPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_MEDIA_IMAGES)
+        } else {
+            PackageManager.PERMISSION_GRANTED
+        }
+        val readVideoPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_MEDIA_VIDEO)
+        } else {
+            PackageManager.PERMISSION_GRANTED
+        }
+        val readAudioPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_MEDIA_AUDIO)
+        } else {
+            PackageManager.PERMISSION_GRANTED
+        }
+
+        Log.d("PermissionCheck", "Mic permission: ${micPermission == PackageManager.PERMISSION_GRANTED}")
+        Log.d("PermissionCheck", "Storage permission: ${storagePermission == PackageManager.PERMISSION_GRANTED}")
+        Log.d("PermissionCheck", "Read Images permission: ${readImagesPermission == PackageManager.PERMISSION_GRANTED}")
+        Log.d("PermissionCheck", "Read Video permission: ${readVideoPermission == PackageManager.PERMISSION_GRANTED}")
+        Log.d("PermissionCheck", "Read Audio permission: ${readAudioPermission == PackageManager.PERMISSION_GRANTED}")
+
+        return micPermission == PackageManager.PERMISSION_GRANTED &&
+                storagePermission == PackageManager.PERMISSION_GRANTED &&
+                readImagesPermission == PackageManager.PERMISSION_GRANTED &&
+                readVideoPermission == PackageManager.PERMISSION_GRANTED &&
+                readAudioPermission == PackageManager.PERMISSION_GRANTED
     }
 
     private fun requestPermissions() {
@@ -456,20 +554,27 @@ class MainActivity : ComponentActivity() {
         if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             permissionsNeeded.add(android.Manifest.permission.RECORD_AUDIO)
         }
-        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-            permissionsNeeded.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                permissionsNeeded.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+        } else {
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED) {
+                permissionsNeeded.add(android.Manifest.permission.READ_MEDIA_IMAGES)
+            }
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_MEDIA_VIDEO) != PackageManager.PERMISSION_GRANTED) {
+                permissionsNeeded.add(android.Manifest.permission.READ_MEDIA_VIDEO)
+            }
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_MEDIA_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                permissionsNeeded.add(android.Manifest.permission.READ_MEDIA_AUDIO)
+            }
         }
 
         if (permissionsNeeded.isNotEmpty()) {
             ActivityCompat.requestPermissions(this, permissionsNeeded.toTypedArray(), REQUEST_PERMISSIONS_CODE)
         }
     }
-
-    // Thêm mã request code để nhận diện yêu cầu
-    companion object {
-        private const val REQUEST_PERMISSIONS_CODE = 100
-    }
-
 
     override fun onRequestPermissionsResult(
         requestCode: Int,
@@ -479,10 +584,43 @@ class MainActivity : ComponentActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
         if (requestCode == REQUEST_PERMISSIONS_CODE) {
+            permissions.forEachIndexed { index, permission ->
+                val granted = grantResults[index] == PackageManager.PERMISSION_GRANTED
+                Log.d("PermissionResult", "Permission: $permission, Granted: $granted")
+            }
+
             if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+                // Tất cả quyền đã được cấp
                 Toast.makeText(this, "Tất cả quyền đã được cấp", Toast.LENGTH_SHORT).show()
+                Log.d("PermissionResult", "All permissions granted")
+
+                // Khởi tạo PorcupineManager nếu quyền RECORD_AUDIO được cấp
+                try {
+                    porcupineManager = PorcupineManager.Builder()
+                        .setAccessKey("5S5l2+By8Ezeb8LTXbPr4W6ncpbhkUI4faR+Af/k70PDzoW+WV8iPA==") // Thay YOUR_ACCESS_KEY bằng khóa của bạn
+                        .setKeywords(
+                            arrayOf(
+                                Porcupine.BuiltInKeyword.PORCUPINE,
+                                Porcupine.BuiltInKeyword.BUMBLEBEE
+                            )
+                        )
+                        .build(applicationContext, wakeWordCallback)
+
+                    porcupineManager.start() // Bắt đầu lắng nghe từ khóa
+                    Log.d("PorcupineManager", "PorcupineManager started successfully.")
+                } catch (e: PorcupineException) {
+                    e.printStackTrace()
+                    Log.e("PorcupineManager", "Failed to initialize PorcupineManager: ${e.message}")
+                }
+
             } else {
-                Toast.makeText(this, "Không đủ quyền truy cập", Toast.LENGTH_SHORT).show()
+                // Một số quyền bị từ chối
+                if (permissions.contains(android.Manifest.permission.RECORD_AUDIO) &&
+                    !ActivityCompat.shouldShowRequestPermissionRationale(this, android.Manifest.permission.RECORD_AUDIO)
+                ) {
+                    Toast.makeText(this, "Không đủ quyền truy cập", Toast.LENGTH_SHORT).show()
+                    Log.d("PermissionResult", "Permissions not fully granted")
+                }
             }
         }
     }
@@ -499,8 +637,6 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-
-
     private fun startRecording() {
         outputFile = File(getExternalFilesDir(null), "recorded_audio.mp4")
         mediaRecorder = MediaRecorder().apply {
@@ -514,7 +650,6 @@ class MainActivity : ComponentActivity() {
         Toast.makeText(this, "Bắt đầu ghi âm", Toast.LENGTH_SHORT).show()
         Log.d(TAG,"Bắt đầu ghi âm")
     }
-
     private fun stopRecording() {
         mediaRecorder?.apply {
             stop()
@@ -536,8 +671,7 @@ class MainActivity : ComponentActivity() {
                 Log.e(TAG, "Lỗi chuyển đổi: $result")
             }
         }
-
-        // Phát file âm thanh sau khi dừng ghi
+// Phát file âm thanh sau khi dừng ghi
 //        mediaPlayer = MediaPlayer().apply {
 //            setDataSource(outputFile.absolutePath)
 //            prepare()
@@ -547,8 +681,7 @@ class MainActivity : ComponentActivity() {
 //            }
 //            start()
 //        }
-
-        // Phát file âm thanh sau khi dừng ghi
+// Phát file âm thanh sau khi dừng ghi
 //        mediaPlayer = MediaPlayer().apply {
 //            setDataSource(outputAudioFile.absolutePath)
 //            prepare()
@@ -558,7 +691,6 @@ class MainActivity : ComponentActivity() {
 //            }
 //            start()
 //        }
-
         uploadFile(outputFile.absolutePath.toString()) { response ->
             response?.let {
                 Log.d(TAG,"Best Match: ${it.bestMatch}")
@@ -568,46 +700,69 @@ class MainActivity : ComponentActivity() {
             } ?: Log.d(TAG,"Failed to get response")
         }
     }
-
     fun handleBestMatch(recordText: String) {
         if (recordText == "bật đèn") {
             sendRequest("/light/on")
+            database.child("1").setValue(1)
             Log.d("TAG","bat den")
             return
         }
         if (recordText == "tắt đèn") {
             sendRequest("/light/off")
+            database.child("1").setValue(0)
             Log.d("TAG","tat den")
             return
         }
         if (recordText == "bật quạt") {
             sendRequest("/fan/on")
+            database.child("2").setValue(1)
             Log.d("TAG","bat quat")
             return
         }
         if (recordText == "tắt quạt") {
             sendRequest("/fan/off")
+            database.child("2").setValue(0)
             Log.d("TAG","tat quat")
             return
         }
         if (recordText == "mở cửa") {
             sendRequest("/door/open")
+            database.child("3").setValue(1)
             Log.d("TAG","mo cua")
             return
         }
         if (recordText == "đóng cửa") {
             sendRequest("/door/close")
+            database.child("3").setValue(0)
             Log.d("TAG","dong cua")
             return
         }
     }
-
     private fun convertToMp3(inputPath: String) {
     }
+    private fun checkMicrophonePermission(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            this,
+            android.Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+
 
     override fun onDestroy() {
         super.onDestroy()
         mediaPlayer?.release()
         mediaPlayer = null
+        try {
+            if (::porcupineManager.isInitialized) {
+                porcupineManager.stop()
+                porcupineManager.delete()
+                Log.d("PorcupineManager", "PorcupineManager stopped and deleted successfully.")
+            }
+        } catch (e: PorcupineException) {
+            e.printStackTrace()
+            Log.e("PorcupineManager", "Error stopping or deleting PorcupineManager: ${e.message}")
+        }
     }
+
 }

@@ -73,4 +73,5 @@ dependencies {
     implementation(libs.firebase.analytics)
     implementation (libs.firebase.database)
     implementation (libs.firebase.database.ktx)
+    implementation(libs.porcupine.android)
 }
