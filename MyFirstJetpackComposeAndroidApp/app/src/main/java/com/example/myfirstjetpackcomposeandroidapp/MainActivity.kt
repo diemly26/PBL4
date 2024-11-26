@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,13 +26,22 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,6 +54,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.ReturnCode
 import com.example.myfirstjetpackcomposeandroidapp.ui.theme.MyFirstJetpackComposeAndroidAppTheme
@@ -52,6 +64,8 @@ import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
@@ -64,9 +78,10 @@ data class ResponseData(
     val score: Int
 )
 
-var ESP8266_URL = "http://10.10.27.246"
+var ESP8266_URL = "http://192.168.110.142"
 private const val REQUEST_MIC_PERMISSION = 200
 private const val REQUEST_STORAGE_PERMISSION = 300
+var GAS_THRESHOLD = 700
 
 class MainActivity : ComponentActivity() {
 
@@ -147,6 +162,7 @@ class MainActivity : ComponentActivity() {
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
 
+                            SensorDataScreen()
 
                             Button(
                                 onClick = {
@@ -350,7 +366,6 @@ class MainActivity : ComponentActivity() {
 
             }
         }
-
     }
 
     fun uploadFile(filePath: String, callback: (ResponseData?) -> Unit) {
@@ -611,3 +626,74 @@ class MainActivity : ComponentActivity() {
         mediaPlayer = null
     }
 }
+
+@Composable
+fun SensorDataScreen() {
+    var temperature by remember { mutableStateOf("--") }
+    var humidity by remember { mutableStateOf("--") }
+    var gasLevel by remember { mutableStateOf("--") }
+    var isLoading by remember { mutableStateOf(false) }
+    var showDialog by remember { mutableStateOf(false) }
+
+    // Gọi API liên tục để lấy dữ liệu mỗi 5 giây
+    LaunchedEffect(Unit) {
+        while (true) {
+            isLoading = true
+            try {
+                // Gọi API để lấy dữ liệu từ ESP8266
+                val data = RetrofitInstance.api.getSensorData()
+                temperature = data.temperature.toString()
+                humidity = data.humidity.toString()
+                gasLevel = data.gas.toString()
+
+                // Nếu mức gas vượt quá ngưỡng, hiển thị cảnh báo
+                if (gasLevel.toInt() > GAS_THRESHOLD) {
+                    showDialog = true
+                }
+            } catch (e: Exception) {
+                temperature = "Error"
+                humidity = "Error"
+                gasLevel = "Error"
+            } finally {
+                isLoading = false
+            }
+
+            delay(5000)  // Đợi 5 giây trước khi gọi lại API
+        }
+    }
+
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = { Text("Gas Leak Alert") },
+            text = { Text("Warning: High Gas Level detected!") },
+            confirmButton = {
+                TextButton(onClick = { showDialog = false }) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(text = "Temperature: $temperature °C", style = MaterialTheme.typography.bodySmall)
+        Text(text = "Humidity: $humidity %", style = MaterialTheme.typography.bodySmall)
+        Text(text = "Gas Level: $gasLevel", style = MaterialTheme.typography.bodySmall)
+
+        if (isLoading) {
+            CircularProgressIndicator()
+        }
+    }
+}
+
+
+
+
+
+
