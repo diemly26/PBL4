@@ -56,6 +56,10 @@ import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
@@ -68,7 +72,7 @@ data class ResponseData(
     val score: Int
 )
 
-var ESP8266_URL = "http://10.10.26.4"
+var ESP8266_URL = "http://192.168.110.142"
 private const val REQUEST_MIC_PERMISSION = 200
 private const val REQUEST_STORAGE_PERMISSION = 300
 private lateinit var porcupineManager: PorcupineManager
@@ -365,6 +369,13 @@ class MainActivity : ComponentActivity() {
                                             if (micIsOn) {
                                                 micPainter = micOnPainter
                                                 startRecording()
+                                                CoroutineScope(Dispatchers.Main).launch{ //ham delay 5 giay
+                                                    delay(3000)
+                                                    micIsOn = false
+                                                    textOfMicButton = "Mic"
+                                                    micPainter = micOffPainter
+                                                    stopRecording()
+                                                } // toi day
                                             } else {
                                                 micPainter = micOffPainter
                                                 stopRecording()
