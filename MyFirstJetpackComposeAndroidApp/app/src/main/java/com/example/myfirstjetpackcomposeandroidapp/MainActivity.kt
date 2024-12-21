@@ -1,8 +1,12 @@
 package com.example.myfirstjetpackcomposeandroidapp
 
+import android.Manifest
 import android.content.pm.PackageManager
+import android.media.AudioFormat
+import android.media.AudioRecord
 import android.media.MediaPlayer
 import android.media.MediaRecorder
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -54,8 +58,11 @@ import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import org.json.JSONObject
 import java.io.File
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Timer
+import java.util.TimerTask
 
 
 data class ResponseData(
@@ -79,7 +86,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var outputAudioFile: File
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
+    if (!checkPermissions()) {
+        requestPermissions()
+    }
         enableEdgeToEdge()
         setContent {
             MyFirstJetpackComposeAndroidAppTheme {
@@ -355,21 +364,21 @@ class MainActivity : ComponentActivity() {
 
     fun uploadFile(filePath: String, callback: (ResponseData?) -> Unit) {
         Thread {
-            val url = URL("http://192.168.1.6:5000/upload")
+            val url = URL("http://192.168.1.152:5000/upload")
             val boundary = "Boundary-${System.currentTimeMillis()}"
             val file = File(filePath)
             var responseData: ResponseData? = null
 
             // Phát file âm thanh sau khi dừng ghi
-//            mediaPlayer = MediaPlayer().apply {
-//                setDataSource(filePath)
-//                prepare()
-//                setOnCompletionListener {
-//                    release()
-//                    mediaPlayer = null
-//                }
-//                start()
-//            }
+            mediaPlayer = MediaPlayer().apply {
+                setDataSource(filePath)
+                prepare()
+                setOnCompletionListener {
+                    release()
+                    mediaPlayer = null
+                }
+                start()
+            }
 
             try {
                 val connection = url.openConnection() as HttpURLConnection
@@ -447,8 +456,19 @@ class MainActivity : ComponentActivity() {
     private fun checkPermissions(): Boolean {
         val micPermission = ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
         val storagePermission = ContextCompat.checkSelfPermission(this, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
-        return micPermission == PackageManager.PERMISSION_GRANTED && storagePermission == PackageManager.PERMISSION_GRANTED
+
+        // Kiểm tra quyền chạy nền nếu chạy trên Android 10 trở lên
+        val foregroundServicePermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContextCompat.checkSelfPermission(this, android.Manifest.permission.FOREGROUND_SERVICE)
+        } else {
+            PackageManager.PERMISSION_GRANTED // Không cần kiểm tra quyền này trên Android 9 trở xuống
+        }
+
+        return micPermission == PackageManager.PERMISSION_GRANTED &&
+                storagePermission == PackageManager.PERMISSION_GRANTED &&
+                foregroundServicePermission == PackageManager.PERMISSION_GRANTED
     }
+
 
     private fun requestPermissions() {
         val permissionsNeeded = mutableListOf<String>()
@@ -460,10 +480,17 @@ class MainActivity : ComponentActivity() {
             permissionsNeeded.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }
 
+        // Yêu cầu quyền chạy nền nếu chạy trên Android 10 trở lên
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+            ContextCompat.checkSelfPermission(this, android.Manifest.permission.FOREGROUND_SERVICE) != PackageManager.PERMISSION_GRANTED) {
+            permissionsNeeded.add(android.Manifest.permission.FOREGROUND_SERVICE)
+        }
+
         if (permissionsNeeded.isNotEmpty()) {
             ActivityCompat.requestPermissions(this, permissionsNeeded.toTypedArray(), REQUEST_PERMISSIONS_CODE)
         }
     }
+
 
     // Thêm mã request code để nhận diện yêu cầu
     companion object {
@@ -479,13 +506,41 @@ class MainActivity : ComponentActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
         if (requestCode == REQUEST_PERMISSIONS_CODE) {
-            if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+            val deniedPermissions = mutableListOf<String>()
+            val grantedPermissions = mutableListOf<String>()
+
+            // Kiểm tra từng quyền
+            for (i in permissions.indices) {
+                if (grantResults[i] == PackageManager.PERMISSION_GRANTED) {
+                    grantedPermissions.add(permissions[i])
+                } else {
+                    deniedPermissions.add(permissions[i])
+                }
+            }
+
+            // Xử lý kết quả
+            if (deniedPermissions.isEmpty()) {
                 Toast.makeText(this, "Tất cả quyền đã được cấp", Toast.LENGTH_SHORT).show()
+                // Bắt đầu lắng nghe hoặc logic cần thiết
             } else {
-                Toast.makeText(this, "Không đủ quyền truy cập", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    this,
+                    "Các quyền bị từ chối: ${deniedPermissions.joinToString()}",
+                    Toast.LENGTH_LONG
+                ).show()
+
+                // Gợi ý người dùng mở cài đặt nếu cần quyền quan trọng
+                if (deniedPermissions.contains(android.Manifest.permission.RECORD_AUDIO)) {
+                    Toast.makeText(
+                        this,
+                        "Ứng dụng cần quyền microphone để hoạt động",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
             }
         }
     }
+
 
     fun convertM4aToMp3(m4aFilePath: String, mp3FilePath: String, onComplete: (Boolean, String?) -> Unit) {
         val command = "-i $m4aFilePath -ar 44100 -ac 2 -b:a 192k -codec:a libmp3lame -qscale:a 2 $mp3FilePath"
@@ -564,7 +619,6 @@ class MainActivity : ComponentActivity() {
                 Log.d(TAG,"Best Match: ${it.bestMatch}")
                 handleBestMatch(it.bestMatch)
                 Log.d(TAG,"Recognized Text: ${it.recognizedText}")
-                Log.d(TAG,"Score: ${it.score}")
             } ?: Log.d(TAG,"Failed to get response")
         }
     }
@@ -602,7 +656,96 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun convertToMp3(inputPath: String) {
+    private fun startListenHeyMisa() {
+        outputFile = File(getExternalFilesDir(null), "recorded_audio.mp4")
+        mediaRecorder = MediaRecorder().apply {
+            setAudioSource(MediaRecorder.AudioSource.MIC)
+            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+            setOutputFile(outputFile.absolutePath)
+            prepare()
+            start()
+        }
+        Toast.makeText(this, "Bắt đầu nghe hey misa", Toast.LENGTH_SHORT).show()
+        Log.d(TAG,"Bắt đầu ghi âm")
+    }
+
+    private fun checkHeyMisa(): Boolean {
+        mediaRecorder?.apply {
+            stop()
+            release()
+        }
+        mediaRecorder = null
+
+        Toast.makeText(this, "Đã dừng ghi âm", Toast.LENGTH_SHORT).show()
+        Log.d(TAG, "Đã dừng ghi âm và lưu tại ${outputFile.absolutePath}")
+
+        // Đặt đường dẫn file MP3
+        outputAudioFile = File(getExternalFilesDir(null), "recorded_audio.mp3")
+
+        // Chuyển đổi từ M4A sang MP3
+        convertM4aToMp3(outputFile.absolutePath, outputAudioFile.absolutePath) { success, result ->
+            if (success) {
+                Log.d(TAG, "Chuyển đổi thành công! File MP3: $result")
+            } else {
+                Log.e(TAG, "Lỗi chuyển đổi: $result")
+            }
+        }
+
+        // Phát file âm thanh sau khi dừng ghi
+//        mediaPlayer = MediaPlayer().apply {
+//            setDataSource(outputFile.absolutePath)
+//            prepare()
+//            setOnCompletionListener {
+//                release()
+//                mediaPlayer = null
+//            }
+//            start()
+//        }
+
+        // Phát file âm thanh sau khi dừng ghi
+//        mediaPlayer = MediaPlayer().apply {
+//            setDataSource(outputAudioFile.absolutePath)
+//            prepare()
+//            setOnCompletionListener {
+//                release()
+//                mediaPlayer = null
+//            }
+//            start()
+//        }
+
+        uploadFile(outputFile.absolutePath.toString()) { response ->
+            response?.let {
+                Log.d(TAG,"Best Match: ${it.bestMatch}")
+                handleBestMatch(it.bestMatch)
+                Log.d(TAG,"Recognized Text: ${it.recognizedText}")
+            } ?: Log.d(TAG,"Failed to get response")
+        }
+        return false
+    }
+
+    private var isRecording = false // Biến cờ để kiểm soát trạng thái ghi âm
+    private lateinit var timer: Timer
+
+    private fun startTimer() {
+        timer = Timer()
+        timer.scheduleAtFixedRate(object : TimerTask() {
+            override fun run() {
+                runOnUiThread {
+                    if (isRecording) {
+                        stopRecording()
+                    } else {
+                        startRecording()
+                    }
+                    isRecording = !isRecording
+                }
+            }
+        }, 0, 3000) // Chạy mỗi 5 giây
+    }
+
+    private fun stopTimer() {
+        timer.cancel()
+        isRecording = false
     }
 
     override fun onDestroy() {

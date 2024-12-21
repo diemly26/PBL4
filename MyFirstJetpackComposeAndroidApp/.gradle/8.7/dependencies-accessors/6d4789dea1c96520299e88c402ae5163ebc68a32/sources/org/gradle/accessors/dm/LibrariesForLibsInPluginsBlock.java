@@ -567,7 +567,7 @@ public class LibrariesForLibsInPluginsBlock extends AbstractExternalDependencyFa
 
         /**
          * Dependency provider for <b>analytics</b> with <b>com.google.firebase:firebase-analytics</b> coordinates and
-         * with <b>no version specified</b>
+         * with version <b>22.1.2</b>
          * <p>
          * This dependency was declared in catalog libs.versions.toml
          *
@@ -630,7 +630,7 @@ public class LibrariesForLibsInPluginsBlock extends AbstractExternalDependencyFa
 
         /**
          * Dependency provider for <b>ktx</b> with <b>com.google.firebase:firebase-database-ktx</b> coordinates and
-         * with version reference <b>firebaseDatabaseKtx</b>
+         * with version <b>21.0.0</b>
          * <p>
          * This dependency was declared in catalog libs.versions.toml
          *
