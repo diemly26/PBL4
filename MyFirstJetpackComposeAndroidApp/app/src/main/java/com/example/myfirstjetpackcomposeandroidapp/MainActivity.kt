@@ -29,10 +29,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,6 +48,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,11 +57,13 @@ import androidx.core.content.ContextCompat
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.ReturnCode
 import com.example.myfirstjetpackcomposeandroidapp.ui.theme.MyFirstJetpackComposeAndroidAppTheme
+import com.example.myfirstjetpackcomposeandroidapp.ui.theme.RetrofitInstance
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
+import kotlinx.coroutines.delay
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
@@ -74,6 +82,7 @@ data class ResponseData(
 var ESP8266_URL = "http://10.10.27.246"
 private const val REQUEST_MIC_PERMISSION = 200
 private const val REQUEST_STORAGE_PERMISSION = 300
+val GAS_THRESHOLD = 700
 
 class MainActivity : ComponentActivity() {
 
@@ -84,6 +93,7 @@ class MainActivity : ComponentActivity() {
     private var mediaPlayer: MediaPlayer? = null
     private lateinit var outputFile: File
     private lateinit var outputAudioFile: File
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
     if (!checkPermissions()) {
@@ -122,6 +132,12 @@ class MainActivity : ComponentActivity() {
                     var doorOffPainter = painterResource(id = R.drawable.door_is_close)
                     var doorPainter by remember { mutableStateOf(doorOffPainter) }
 
+                    var temperature by remember { mutableStateOf("--") }
+                    var humidity by remember { mutableStateOf("--") }
+                    var gasLevel by remember { mutableStateOf(0) }
+                    var isLoading by remember { mutableStateOf(false) }
+                    var showDialog by remember { mutableStateOf(false) }
+
                     database.addValueEventListener(object : ValueEventListener {
                         override fun onDataChange(snapshot: DataSnapshot) {
                             // Cập nhật trạng thái từ Firebase
@@ -156,6 +172,116 @@ class MainActivity : ComponentActivity() {
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
 
+                            LaunchedEffect(Unit) {
+                                while (true) {
+                                    isLoading = true
+                                    try {
+                                        // Gọi API để lấy dữ liệu từ ESP8266
+                                        val data = RetrofitInstance.api.getSensorData()
+                                        temperature = data.temperature.toString()
+                                        humidity = data.humidity.toString()
+                                        gasLevel = data.gas.toInt()
+
+                                        // Nếu mức gas vượt quá ngưỡng, hiển thị cảnh báo
+                                        if (gasLevel.toInt() > GAS_THRESHOLD) {
+                                            showDialog = true
+                                        }
+                                    } catch (e: Exception) {
+                                        temperature = "Error"
+                                        humidity = "Error"
+                                        gasLevel = 0
+                                    } finally {
+                                        isLoading = false
+                                    }
+
+                                    delay(5000)  // Đợi 5 giây trước khi gọi lại API
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(60.dp)
+                                    .padding(start = 10.dp, end = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Button(
+                                    onClick = {},
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .weight(1f)
+                                        .padding(end = 8.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(red = 180, green = 190, blue = 201),
+                                        disabledContainerColor = Color.White
+                                    ),
+                                    shape = RoundedCornerShape(8.dp),
+                                    enabled = false
+                                ) {
+                                    Text(
+                                        text = "Temperature:\n $temperature °C",
+                                        color = Color.Black,
+                                        textAlign = TextAlign.Center,
+                                        fontSize = 13.sp
+                                    )
+                                }
+
+                                Column(
+                                    modifier = Modifier
+                                        .weight(0.25f)
+                                        .fillMaxHeight()
+                                        .padding(0.dp)
+                                        .background(
+                                            color = Color.Transparent, // Nền màu trắng
+                                            shape = RoundedCornerShape(8.dp) // Bo góc nếu cần
+                                        ),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                ) {
+                                    Text(
+                                        text = "GAS",
+                                        color = Color.White,
+                                        fontSize = 15.sp,
+                                        textAlign = TextAlign.Center,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier
+                                            .padding(bottom = 10.dp)
+                                    )
+
+                                    Button(
+                                        onClick = { /* Hành động của bạn */ },
+                                        modifier = Modifier
+                                            .height(18.dp)
+                                            .width(18.dp), // Chiều cao và chiều dài là 5x5 dp
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (gasLevel < GAS_THRESHOLD) Color.Green else Color.Red// Màu nền của nút
+                                        ),
+                                        shape = RoundedCornerShape(9.dp) // Độ bo tròn của nút
+                                    ) {
+                                    }
+                                }
+
+
+                                Button(
+                                    onClick = {},
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .weight(1f)
+                                        .padding(start = 8.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(red = 180, green = 190, blue = 201),
+                                        disabledContainerColor = Color.White
+                                    ),
+                                    shape = RoundedCornerShape(8.dp),
+                                    enabled = false
+                                ) {
+                                    Text(
+                                        text = "Humidity:\n $humidity %",
+                                        color = Color.Black,
+                                        textAlign = TextAlign.Center,
+                                        fontSize = 15.sp
+                                    )
+                                }
+                            }
 
                             Button(
                                 onClick = {
@@ -274,7 +400,8 @@ class MainActivity : ComponentActivity() {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(90.dp),
+                                    .height(90.dp)
+                                    .padding(bottom = 10.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Button(
@@ -318,7 +445,7 @@ class MainActivity : ComponentActivity() {
                                         }
                                     },
                                     modifier = Modifier
-                                        .width(90.dp)
+                                        .width(80.dp)
                                         .fillMaxHeight()
                                         .padding(end = 0.dp),
                                     colors = ButtonDefaults.buttonColors(
@@ -404,9 +531,9 @@ class MainActivity : ComponentActivity() {
                 val responseCode = connection.responseCode
                 if (responseCode == HttpURLConnection.HTTP_OK) {
                     val responseText = connection.inputStream.bufferedReader().use { it.readText() }
-                    Log.d("TAG", "responeText: ${responseText}")
+                    Log.d("HTTP_Response", "responeText: ${responseText}")
                     val jsonResponse = JSONObject(responseText)
-                    Log.d("TAG", "jsonObject: ${jsonResponse}")
+                    Log.d("HTTP_Response", "jsonObject: ${jsonResponse}")
                     responseData = ResponseData(
                         bestMatch = jsonResponse.getString("best_match"),
                         recognizedText = jsonResponse.getString("recognized_text"),
@@ -754,3 +881,59 @@ class MainActivity : ComponentActivity() {
         mediaPlayer = null
     }
 }
+
+
+//@Composable
+//fun SensorDataScreen() {
+//    // Gọi API liên tục để lấy dữ liệu mỗi 5 giây
+//    LaunchedEffect(Unit) {
+//        while (true) {
+//            isLoading = true
+//            try {
+//                // Gọi API để lấy dữ liệu từ ESP8266
+//                val data = RetrofitInstance.api.getSensorData()
+//                temperature = data.temperature.toString()
+//                humidity = data.humidity.toString()
+//                gasLevel = data.gas.toString()
+//
+//                // Nếu mức gas vượt quá ngưỡng, hiển thị cảnh báo
+//                if (gasLevel.toInt() > GAS_THRESHOLD) {
+//                    showDialog = true
+//                }
+//            } catch (e: Exception) {
+//                temperature = "Error"
+//                humidity = "Error"
+//                gasLevel = "Error"
+//            } finally {
+//                isLoading = false
+//            }
+//
+//            delay(5000)  // Đợi 5 giây trước khi gọi lại API
+//        }
+//    }
+//
+//    if (showDialog) {
+//        AlertDialog(
+//            onDismissRequest = { showDialog = false },
+//            title = { Text("Gas Leak Alert") },
+//            text = { Text("Warning: High Gas Level detected!") },
+//            confirmButton = {
+//                TextButton(onClick = { showDialog = false }) {
+//                    Text("OK")
+//                }
+//            }
+//        )
+//    }
+//
+//    Column(
+//        modifier = Modifier
+//            .fillMaxSize()
+//            .padding(16.dp),
+//        verticalArrangement = Arrangement.Center,
+//        horizontalAlignment = Alignment.CenterHorizontally
+//    ) {
+//        Text(text = "Temperature: $temperature °C", style = MaterialTheme.typography.bodySmall)
+//        Text(text = "Humidity: $humidity %", style = MaterialTheme.typography.bodySmall)
+//        Text(text = "Gas Level: $gasLevel", style = MaterialTheme.typography.bodySmall)
+//    }
+//}
