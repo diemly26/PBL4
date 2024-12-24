@@ -82,10 +82,10 @@ data class ResponseData(
     val score: Int
 )
 
-var ESP8266_URL = "http://10.10.27.246"
+var ESP8266_URL = "http://172.20.10.2"
 private const val REQUEST_MIC_PERMISSION = 200
 private const val REQUEST_STORAGE_PERMISSION = 300
-val GAS_THRESHOLD = 700
+val GAS_THRESHOLD = 375
 
 class MainActivity : ComponentActivity() {
 
@@ -103,7 +103,7 @@ class MainActivity : ComponentActivity() {
     if (!checkPermissions()) {
         requestPermissions()
     }
-        startTimer()
+//        startTimer()
         enableEdgeToEdge()
         setContent {
             MyFirstJetpackComposeAndroidAppTheme {
@@ -140,7 +140,6 @@ class MainActivity : ComponentActivity() {
                     var temperature by remember { mutableStateOf("--") }
                     var humidity by remember { mutableStateOf("--") }
                     var gasLevel by remember { mutableStateOf(0) }
-                    var isLoading by remember { mutableStateOf(false) }
                     var showDialog by remember { mutableStateOf(false) }
 
                     database.addValueEventListener(object : ValueEventListener {
@@ -179,29 +178,33 @@ class MainActivity : ComponentActivity() {
 
                             LaunchedEffect(Unit) {
                                 while (true) {
-                                    isLoading = true
                                     try {
                                         // Gọi API để lấy dữ liệu từ ESP8266
                                         val data = RetrofitInstance.api.getSensorData()
                                         temperature = data.temperature.toString()
+                                        Log.d(TAG, "Nhiệt độ: $temperature")
                                         humidity = data.humidity.toString()
+                                        Log.d(TAG, "Độ ẩm: $humidity")
                                         gasLevel = data.gas.toInt()
+                                        Log.d(TAG, "Gas level: $gasLevel")
 
                                         // Nếu mức gas vượt quá ngưỡng, hiển thị cảnh báo
-                                        if (gasLevel.toInt() > GAS_THRESHOLD) {
+                                        if (gasLevel > GAS_THRESHOLD) {
                                             showDialog = true
                                         }
                                     } catch (e: Exception) {
+                                        // Xử lý lỗi khi gọi API
+                                        Log.e(TAG, "Lỗi khi gọi API: ${e.message}")
                                         temperature = "Error"
                                         humidity = "Error"
                                         gasLevel = 0
-                                    } finally {
-                                        isLoading = false
                                     }
 
-                                    delay(5000)  // Đợi 5 giây trước khi gọi lại API
+                                    // Chờ 5 giây trước khi gọi lại API
+                                    delay(5000)
                                 }
                             }
+
 
                             Row(
                                 modifier = Modifier
@@ -245,7 +248,7 @@ class MainActivity : ComponentActivity() {
                                     Text(
                                         text = "GAS",
                                         color = Color.White,
-                                        fontSize = 15.sp,
+                                        fontSize = 13.sp,
                                         textAlign = TextAlign.Center,
                                         fontWeight = FontWeight.Bold,
                                         modifier = Modifier
@@ -512,21 +515,21 @@ class MainActivity : ComponentActivity() {
             Log.d(TAG,"tep ton tai va duoc gui di")
         }
         Thread {
-            val url = URL("http://192.168.1.152:5000/upload")
+            val url = URL("http://172.20.10.3:5000/upload")
             val boundary = "Boundary-${System.currentTimeMillis()}"
             val file = File(filePath)
             var responseData: ResponseData? = null
 
             // Phát file âm thanh sau khi dừng ghi
-            mediaPlayer = MediaPlayer().apply {
-                setDataSource(filePath)
-                prepare()
-                setOnCompletionListener {
-                    release()
-                    mediaPlayer = null
-                }
-                start()
-            }
+//            mediaPlayer = MediaPlayer().apply {
+//                setDataSource(filePath)
+//                prepare()
+//                setOnCompletionListener {
+//                    release()
+//                    mediaPlayer = null
+//                }
+//                start()
+//            }
 
             try {
                 val connection = url.openConnection() as HttpURLConnection
