@@ -63,7 +63,10 @@ import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
@@ -90,6 +93,7 @@ class MainActivity : ComponentActivity() {
     val database = FirebaseDatabase.getInstance().reference.child("keys")
     private val TAG: String = "HTTP_Response"
     private var mediaRecorder: MediaRecorder? = null
+    private var heymisaMediaRecord: MediaRecorder? = null
     private var mediaPlayer: MediaPlayer? = null
     private lateinit var outputFile: File
     private lateinit var outputAudioFile: File
@@ -99,6 +103,7 @@ class MainActivity : ComponentActivity() {
     if (!checkPermissions()) {
         requestPermissions()
     }
+        startTimer()
         enableEdgeToEdge()
         setContent {
             MyFirstJetpackComposeAndroidAppTheme {
@@ -437,7 +442,16 @@ class MainActivity : ComponentActivity() {
                                             textOfMicButton = if (micIsOn) "Nói gì đi" else "Mic"
                                             if (micIsOn) {
                                                 micPainter = micOnPainter
+                                                stopTimer()
                                                 startRecording()
+                                                CoroutineScope(Dispatchers.Main).launch{ //ham delay 5 giay
+                                                    delay(3000)
+                                                    micIsOn = false
+                                                    textOfMicButton = "Mic"
+                                                    micPainter = micOffPainter
+                                                    stopRecording()
+                                                    startTimer()
+                                                }
                                             } else {
                                                 micPainter = micOffPainter
                                                 stopRecording()
@@ -490,6 +504,13 @@ class MainActivity : ComponentActivity() {
     }
 
     fun uploadFile(filePath: String, callback: (ResponseData?) -> Unit) {
+        val file = File(filePath)
+        if (!file.exists() || file.length() == 0L) {
+            Log.e(TAG, "Tệp không tồn tại hoặc trống: $filePath")
+            return
+        } else {
+            Log.d(TAG,"tep ton tai va duoc gui di")
+        }
         Thread {
             val url = URL("http://192.168.1.152:5000/upload")
             val boundary = "Boundary-${System.currentTimeMillis()}"
@@ -684,6 +705,7 @@ class MainActivity : ComponentActivity() {
 
 
     private fun startRecording() {
+        Log.d(TAG,"bắt đầu nghe lệnh")
         outputFile = File(getExternalFilesDir(null), "recorded_audio.mp4")
         mediaRecorder = MediaRecorder().apply {
             setAudioSource(MediaRecorder.AudioSource.MIC)
@@ -693,11 +715,12 @@ class MainActivity : ComponentActivity() {
             prepare()
             start()
         }
-        Toast.makeText(this, "Bắt đầu ghi âm", Toast.LENGTH_SHORT).show()
-        Log.d(TAG,"Bắt đầu ghi âm")
+//        Toast.makeText(this, "Bắt đầu ghi âm", Toast.LENGTH_SHORT).show()
+        Log.d(TAG,"Bắt đầu ghi âm record")
     }
 
     private fun stopRecording() {
+        Log.d(TAG,"in stop recording")
         mediaRecorder?.apply {
             stop()
             release()
@@ -707,85 +730,53 @@ class MainActivity : ComponentActivity() {
         Toast.makeText(this, "Đã dừng ghi âm", Toast.LENGTH_SHORT).show()
         Log.d(TAG, "Đã dừng ghi âm và lưu tại ${outputFile.absolutePath}")
 
-        // Đặt đường dẫn file MP3
-        outputAudioFile = File(getExternalFilesDir(null), "recorded_audio.mp3")
-
-        // Chuyển đổi từ M4A sang MP3
-        convertM4aToMp3(outputFile.absolutePath, outputAudioFile.absolutePath) { success, result ->
-            if (success) {
-                Log.d(TAG, "Chuyển đổi thành công! File MP3: $result")
-            } else {
-                Log.e(TAG, "Lỗi chuyển đổi: $result")
-            }
-        }
-
-        // Phát file âm thanh sau khi dừng ghi
-//        mediaPlayer = MediaPlayer().apply {
-//            setDataSource(outputFile.absolutePath)
-//            prepare()
-//            setOnCompletionListener {
-//                release()
-//                mediaPlayer = null
-//            }
-//            start()
-//        }
-
-        // Phát file âm thanh sau khi dừng ghi
-//        mediaPlayer = MediaPlayer().apply {
-//            setDataSource(outputAudioFile.absolutePath)
-//            prepare()
-//            setOnCompletionListener {
-//                release()
-//                mediaPlayer = null
-//            }
-//            start()
-//        }
-
         uploadFile(outputFile.absolutePath.toString()) { response ->
             response?.let {
                 Log.d(TAG,"Best Match: ${it.bestMatch}")
                 handleBestMatch(it.bestMatch)
                 Log.d(TAG,"Recognized Text: ${it.recognizedText}")
-            } ?: Log.d(TAG,"Failed to get response")
+            } ?: Log.e(TAG,"Failed to get response")
         }
+
     }
 
     fun handleBestMatch(recordText: String) {
+        Log.d(TAG, "in handle best match")
         if (recordText == "bật đèn") {
             sendRequest("/light/on")
-            Log.d("TAG","bat den")
+            Log.d(TAG,"bat den")
             return
         }
         if (recordText == "tắt đèn") {
             sendRequest("/light/off")
-            Log.d("TAG","tat den")
+            Log.d(TAG,"tat den")
             return
         }
         if (recordText == "bật quạt") {
             sendRequest("/fan/on")
-            Log.d("TAG","bat quat")
+            Log.d(TAG,"bat quat")
             return
         }
         if (recordText == "tắt quạt") {
             sendRequest("/fan/off")
-            Log.d("TAG","tat quat")
+            Log.d(TAG,"tat quat")
             return
         }
         if (recordText == "mở cửa") {
             sendRequest("/door/open")
-            Log.d("TAG","mo cua")
+            Log.d(TAG,"mo cua")
             return
         }
         if (recordText == "đóng cửa") {
             sendRequest("/door/close")
-            Log.d("TAG","dong cua")
+            Log.d(TAG,"dong cua")
             return
         }
     }
 
     private fun startListenHeyMisa() {
         outputFile = File(getExternalFilesDir(null), "recorded_audio.mp4")
-        mediaRecorder = MediaRecorder().apply {
+        heymisaMediaRecord = MediaRecorder().apply {
             setAudioSource(MediaRecorder.AudioSource.MIC)
             setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
             setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
@@ -793,92 +784,137 @@ class MainActivity : ComponentActivity() {
             prepare()
             start()
         }
-        Toast.makeText(this, "Bắt đầu nghe hey misa", Toast.LENGTH_SHORT).show()
-        Log.d(TAG,"Bắt đầu ghi âm")
+//        Toast.makeText(this, "Bắt đầu nghe hey misa", Toast.LENGTH_SHORT).show()
+        Log.d(TAG,"Bắt đầu ghi âm hey misa")
     }
 
-    private fun checkHeyMisa(): Boolean {
-        mediaRecorder?.apply {
-            stop()
-            release()
+    private fun checkHeyMisa(){
+        try {
+            heymisaMediaRecord?.apply {
+                stop()
+                release()
+            }
+            heymisaMediaRecord = null
+
+            Log.d(TAG, "Đã dừng ghi âm và lưu tại ${outputFile.absolutePath}")
+
+            uploadFile(outputFile.absolutePath.toString()) { response ->
+                response?.let {
+                    Log.d(TAG,"Best Match: ${it.bestMatch}")
+                    handleHeyMisa(it.bestMatch)
+                } ?: Log.e(TAG,"Failed to get response")
+            }
+        } catch (e: IllegalArgumentException) {
+            Log.e(TAG, "lỗi khi dừng ghi âm: ${e.message}")
         }
-        mediaRecorder = null
+    }
 
-        Toast.makeText(this, "Đã dừng ghi âm", Toast.LENGTH_SHORT).show()
-        Log.d(TAG, "Đã dừng ghi âm và lưu tại ${outputFile.absolutePath}")
-
-        // Đặt đường dẫn file MP3
-        outputAudioFile = File(getExternalFilesDir(null), "recorded_audio.mp3")
-
-        // Chuyển đổi từ M4A sang MP3
-        convertM4aToMp3(outputFile.absolutePath, outputAudioFile.absolutePath) { success, result ->
-            if (success) {
-                Log.d(TAG, "Chuyển đổi thành công! File MP3: $result")
-            } else {
-                Log.e(TAG, "Lỗi chuyển đổi: $result")
+    private fun handleHeyMisa(text: String) {
+        Log.d(TAG,"in handle heymisa")
+        if (text == "heymisa") {
+            stopTimer()
+            playAudio(R.raw.toi_nghe_day)
+            startRecording()
+            CoroutineScope(Dispatchers.Main).launch{ //ham delay 5 giay
+                delay(5000)
+                Log.d(TAG,"nghe xong xu ly day")
+                stopRecording()
+            }
+            CoroutineScope(Dispatchers.Main).launch{ //ham delay 5 giay
+                delay(10000)
+                startTimer()
             }
         }
-
-        // Phát file âm thanh sau khi dừng ghi
-//        mediaPlayer = MediaPlayer().apply {
-//            setDataSource(outputFile.absolutePath)
-//            prepare()
-//            setOnCompletionListener {
-//                release()
-//                mediaPlayer = null
-//            }
-//            start()
-//        }
-
-        // Phát file âm thanh sau khi dừng ghi
-//        mediaPlayer = MediaPlayer().apply {
-//            setDataSource(outputAudioFile.absolutePath)
-//            prepare()
-//            setOnCompletionListener {
-//                release()
-//                mediaPlayer = null
-//            }
-//            start()
-//        }
-
-        uploadFile(outputFile.absolutePath.toString()) { response ->
-            response?.let {
-                Log.d(TAG,"Best Match: ${it.bestMatch}")
-                handleBestMatch(it.bestMatch)
-                Log.d(TAG,"Recognized Text: ${it.recognizedText}")
-            } ?: Log.d(TAG,"Failed to get response")
-        }
-        return false
     }
 
     private var isRecording = false // Biến cờ để kiểm soát trạng thái ghi âm
-    private lateinit var timer: Timer
+//    private lateinit var timer: Timer
+//
+//    private var isProcessing = false
+//
+//    private fun startTimer() {
+//        timer = Timer()
+//        timer.scheduleAtFixedRate(object : TimerTask() {
+//            override fun run() {
+//                if (isProcessing) return
+//                isProcessing = true
+//
+//                runOnUiThread {
+//                    try {
+//                        if (isRecording) {
+//                            Log.d(TAG, "check hey misa")
+//                            checkHeyMisa()
+//                        } else {
+//                            startListenHeyMisa()
+//                            Log.d(TAG, "bat dau nghe")
+//                        }
+//                        isRecording = !isRecording
+//                    } finally {
+//                        isProcessing = false
+//                    }
+//                }f
+//            }
+//        }, 0, 3000) // Chạy mỗi 3 giây
+//    }
+//
+//
+//    private fun stopTimer() {
+//        timer.cancel()
+//        isRecording = false
+//    }
+
+    private val handler = Handler(Looper.getMainLooper())
+    private lateinit var runnable: Runnable
 
     private fun startTimer() {
-        timer = Timer()
-        timer.scheduleAtFixedRate(object : TimerTask() {
-            override fun run() {
-                runOnUiThread {
-                    if (isRecording) {
-                        stopRecording()
-                    } else {
-                        startRecording()
-                    }
-                    isRecording = !isRecording
-                }
+        runnable = Runnable {
+            // Thực hiện tác vụ
+            if (isRecording) {
+                checkHeyMisa()
+            } else {
+                startListenHeyMisa()
             }
-        }, 0, 3000) // Chạy mỗi 5 giây
+            isRecording = !isRecording
+
+            // Lặp lại sau 3 giây
+            handler.postDelayed(runnable, 5000)
+        }
+        handler.post(runnable)
     }
 
     private fun stopTimer() {
-        timer.cancel()
-        isRecording = false
+        Log.d(TAG, "stop timer")
+        handler.removeCallbacks(runnable)
     }
+
+    private fun playAudio(resourceId: Int) {
+        // Giải phóng MediaPlayer nếu đang sử dụng
+        mediaPlayer?.release()
+        mediaPlayer = null
+
+        try {
+            // Khởi tạo MediaPlayer với file từ res/raw
+            mediaPlayer = MediaPlayer.create(this, resourceId)
+            mediaPlayer?.apply {
+                setOnCompletionListener {
+                    release() // Giải phóng MediaPlayer sau khi phát xong
+                    mediaPlayer = null
+                    Log.d("Audio", "Âm thanh phát xong")
+                }
+                start() // Bắt đầu phát
+            }
+        } catch (e: Exception) {
+            Log.e("Audio", "Lỗi khi phát âm thanh: ${e.message}")
+        }
+    }
+
 
     override fun onDestroy() {
         super.onDestroy()
         mediaPlayer?.release()
         mediaPlayer = null
+        heymisaMediaRecord?.release()
+        heymisaMediaRecord = null
     }
 }
 
