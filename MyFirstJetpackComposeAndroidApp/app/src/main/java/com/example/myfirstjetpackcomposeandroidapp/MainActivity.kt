@@ -57,7 +57,7 @@ import androidx.core.content.ContextCompat
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.ReturnCode
 import com.example.myfirstjetpackcomposeandroidapp.ui.theme.MyFirstJetpackComposeAndroidAppTheme
-import com.example.myfirstjetpackcomposeandroidapp.ui.theme.RetrofitInstance
+import com.example.myfirstjetpackcomposeandroidapp.ui.theme.SensorViewModel
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
@@ -82,12 +82,15 @@ data class ResponseData(
     val score: Int
 )
 
-var ESP8266_URL = "http://172.20.10.2"
+var ESP8266_URL = "http://10.10.28.63"
 private const val REQUEST_MIC_PERMISSION = 200
 private const val REQUEST_STORAGE_PERMISSION = 300
 val GAS_THRESHOLD = 375
 
 class MainActivity : ComponentActivity() {
+
+    private val hhandler = Handler(Looper.getMainLooper())
+    private val updateInterval = 5000L // 5 seconds
 
 //    private val ESP8266_URL = "http://10.10.27.246"
     val database = FirebaseDatabase.getInstance().reference.child("keys")
@@ -103,7 +106,7 @@ class MainActivity : ComponentActivity() {
     if (!checkPermissions()) {
         requestPermissions()
     }
-//        startTimer()
+        startTimer()
         enableEdgeToEdge()
         setContent {
             MyFirstJetpackComposeAndroidAppTheme {
@@ -176,35 +179,39 @@ class MainActivity : ComponentActivity() {
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
 
-                            LaunchedEffect(Unit) {
-                                while (true) {
-                                    try {
-                                        // Gọi API để lấy dữ liệu từ ESP8266
-                                        val data = RetrofitInstance.api.getSensorData()
-                                        temperature = data.temperature.toString()
-                                        Log.d(TAG, "Nhiệt độ: $temperature")
-                                        humidity = data.humidity.toString()
-                                        Log.d(TAG, "Độ ẩm: $humidity")
-                                        gasLevel = data.gas.toInt()
-                                        Log.d(TAG, "Gas level: $gasLevel")
-
-                                        // Nếu mức gas vượt quá ngưỡng, hiển thị cảnh báo
-                                        if (gasLevel > GAS_THRESHOLD) {
-                                            showDialog = true
-                                        }
-                                    } catch (e: Exception) {
-                                        // Xử lý lỗi khi gọi API
-                                        Log.e(TAG, "Lỗi khi gọi API: ${e.message}")
-                                        temperature = "Error"
-                                        humidity = "Error"
-                                        gasLevel = 0
-                                    }
-
-                                    // Chờ 5 giây trước khi gọi lại API
-                                    delay(5000)
-                                }
-                            }
-
+//                            LaunchedEffect(Unit) {
+//                                while (true) {
+//                                    try {
+//                                        // Gọi API
+//                                        val url = URL("http://10.10.28.63/status")
+//                                        val connection = url.openConnection() as HttpURLConnection
+//                                        connection.requestMethod = "GET"
+//
+//                                        val responseCode = connection.responseCode
+//                                        if (responseCode == HttpURLConnection.HTTP_OK) {
+//                                            val response = connection.inputStream.bufferedReader().use { it.readText() }
+//                                            val jsonObject = JSONObject(response)
+//
+//                                            // Cập nhật state
+//                                            temperature = "${jsonObject.getDouble("temperature")}"
+//                                            humidity = "${jsonObject.getDouble("humidity")}"
+//                                            gasLevel = jsonObject.getInt("gas")
+//                                            Log.d(TAG,"${temperature}")
+//
+//                                            // Kiểm tra gas vượt ngưỡng
+//                                            if (gasLevel.toInt() > GAS_THRESHOLD) {
+//                                                showDialog = true
+//                                            }
+//                                        }
+//                                    } catch (e: Exception) {
+//                                        e.printStackTrace()
+//                                        temperature = "Error"
+//                                        humidity = "Error"
+//                                        gasLevel = 0
+//                                    }
+//                                    delay(5000) // Lặp lại mỗi 5 giây
+//                                }
+//                            }
 
                             Row(
                                 modifier = Modifier
@@ -227,7 +234,7 @@ class MainActivity : ComponentActivity() {
                                     enabled = false
                                 ) {
                                     Text(
-                                        text = "Temperature:\n $temperature °C",
+                                        text = "Temperature:\n ${temperature} °C",
                                         color = Color.Black,
                                         textAlign = TextAlign.Center,
                                         fontSize = 13.sp
@@ -283,7 +290,7 @@ class MainActivity : ComponentActivity() {
                                     enabled = false
                                 ) {
                                     Text(
-                                        text = "Humidity:\n $humidity %",
+                                        text = "Humidity:\n ${humidity} %",
                                         color = Color.Black,
                                         textAlign = TextAlign.Center,
                                         fontSize = 15.sp
@@ -515,7 +522,7 @@ class MainActivity : ComponentActivity() {
             Log.d(TAG,"tep ton tai va duoc gui di")
         }
         Thread {
-            val url = URL("http://172.20.10.3:5000/upload")
+            val url = URL("http://10.10.28.37:5000/upload")
             val boundary = "Boundary-${System.currentTimeMillis()}"
             val file = File(filePath)
             var responseData: ResponseData? = null
@@ -606,7 +613,7 @@ class MainActivity : ComponentActivity() {
 
     private fun checkPermissions(): Boolean {
         val micPermission = ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
-        val storagePermission = ContextCompat.checkSelfPermission(this, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+//        val storagePermission = ContextCompat.checkSelfPermission(this, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
 
         // Kiểm tra quyền chạy nền nếu chạy trên Android 10 trở lên
         val foregroundServicePermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -616,7 +623,7 @@ class MainActivity : ComponentActivity() {
         }
 
         return micPermission == PackageManager.PERMISSION_GRANTED &&
-                storagePermission == PackageManager.PERMISSION_GRANTED &&
+//                storagePermission == PackageManager.PERMISSION_GRANTED &&
                 foregroundServicePermission == PackageManager.PERMISSION_GRANTED
     }
 
@@ -747,31 +754,37 @@ class MainActivity : ComponentActivity() {
         Log.d(TAG, "in handle best match")
         if (recordText == "bật đèn") {
             sendRequest("/light/on")
+            database.child("1").setValue(1)
             Log.d(TAG,"bat den")
             return
         }
         if (recordText == "tắt đèn") {
             sendRequest("/light/off")
+            database.child("1").setValue(0)
             Log.d(TAG,"tat den")
             return
         }
         if (recordText == "bật quạt") {
             sendRequest("/fan/on")
+            database.child("2").setValue(1)
             Log.d(TAG,"bat quat")
             return
         }
         if (recordText == "tắt quạt") {
             sendRequest("/fan/off")
+            database.child("2").setValue(0)
             Log.d(TAG,"tat quat")
             return
         }
         if (recordText == "mở cửa") {
             sendRequest("/door/open")
+            database.child("3").setValue(1)
             Log.d(TAG,"mo cua")
             return
         }
         if (recordText == "đóng cửa") {
             sendRequest("/door/close")
+            database.child("3").setValue(0)
             Log.d(TAG,"dong cua")
             return
         }
@@ -814,7 +827,7 @@ class MainActivity : ComponentActivity() {
 
     private fun handleHeyMisa(text: String) {
         Log.d(TAG,"in handle heymisa")
-        if (text == "heymisa") {
+        if (text == "wake_word_detected") {
             stopTimer()
             playAudio(R.raw.toi_nghe_day)
             startRecording()
@@ -911,13 +924,14 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-
     override fun onDestroy() {
         super.onDestroy()
         mediaPlayer?.release()
         mediaPlayer = null
         heymisaMediaRecord?.release()
         heymisaMediaRecord = null
+        hhandler.removeCallbacksAndMessages(null)
+        handler.removeCallbacksAndMessages(null)
     }
 }
 
