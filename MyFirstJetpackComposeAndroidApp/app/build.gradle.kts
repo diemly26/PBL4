@@ -68,7 +68,8 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
-    implementation(libs.ffmpeg.kit.full)
+    // FFmpeg Kit
+    implementation("com.arthenica:ffmpeg-kit-full:6.0-2")
     implementation(libs.firebase.bom)
     implementation(libs.firebase.analytics)
     implementation (libs.firebase.database)
